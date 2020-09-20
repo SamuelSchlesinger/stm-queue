@@ -43,7 +43,7 @@ backedUpBenchmarks n =
   ]
 
 howManyCooks newQ readQ writeQ n = do
-  q <- atomically newQ
+  q <- newQ
   let
     consumer t n = do
       t' <- getCurrentTime
@@ -84,23 +84,16 @@ throughputTest :: Int -> IO ()
 throughputTest n = do
   putStrLn ("Running a throughput test for " <> show n <> " threads...")
   putStrLn "Queue: "
-  (writes, reads) <- howManyCooks (newQueue @Int) dequeue enqueue n
+  (writes, reads) <- howManyCooks (makeBackedUpQueue 0) dequeue enqueue n
   putStrLn "TQueue: "
-  (writes', reads') <- howManyCooks (T.newTQueue @Int) T.readTQueue T.writeTQueue n
-  putStrLn ("Queue reads - TQueue reads: " <> show (reads - reads'))
-  putStrLn ("Queue writes - TQueue writes: " <> show (writes - writes'))
+  (writes', reads') <- howManyCooks (makeBackedUpTQueue 0) T.readTQueue T.writeTQueue n
+  putStrLn ("Queue reads - TQueue reads over TQueue reads: " <> show (fromIntegral (reads - reads') / fromIntegral reads'))
+  putStrLn ("Queue writes - TQueue writes over TQueue reads: " <> show (fromIntegral (writes - writes') / fromIntegral writes'))
   
 
 main :: IO ()
 main = do
-  throughputTest 2
-  throughputTest 4
-  throughputTest 8
-  throughputTest 16
-  throughputTest 32
-  throughputTest 64
-  throughputTest 128
-  throughputTest 256
+  sequence_ [ throughputTest n | n <- [2^i | i <- [1..12]] ]
   defaultMain
     (  backedUpBenchmarks 100
     <> backedUpBenchmarks 1000
