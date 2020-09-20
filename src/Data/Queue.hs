@@ -24,9 +24,9 @@ import Control.Concurrent.STM
 
 -- | Real time 'Queue' backed by transactional variables ('TVar's)
 data Queue a = Queue
-  !(TVar [a])
-  !(TVar [a])
-  !(TVar [a])
+  {-# UNPACK #-} !(TVar [a])
+  {-# UNPACK #-} !(TVar [a])
+  {-# UNPACK #-} !(TVar [a])
 
 -- | Create a new, empty 'Queue'
 newQueue :: STM (Queue a)
