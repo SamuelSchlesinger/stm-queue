@@ -24,18 +24,14 @@ import Control.Concurrent.STM
 
 -- | Real time 'Queue' backed by transactional variables ('TVar's)
 data Queue a = Queue
-  {-# UNPACK #-} !(TVar [a])
-  {-# UNPACK #-} !(TVar [a])
-  {-# UNPACK #-} !(TVar [a])
-  {-# UNPACK #-} !(TVar [a])
+  {-# UNPACK #-} !(TVar ([a], [a]))
+  {-# UNPACK #-} !(TVar ([a], [a]))
 
 -- | Create a new, empty 'Queue'
 newQueue :: STM (Queue a)
 newQueue = Queue
-  <$> newTVar []
-  <*> newTVar []
-  <*> newTVar []
-  <*> newTVar []
+  <$> newTVar ([], [])
+  <*> newTVar ([], [])
 
 rotate :: [a] -> [a] -> [a] -> [a]
 rotate [] bottom acc = bottom ++ acc
@@ -44,21 +40,17 @@ rotate ts [] acc = ts ++ acc
 
 -- | Enqueue a single item onto the 'Queue'.
 enqueue :: Queue a -> a -> STM ()
-enqueue q@(Queue top topSchedule bottomSchedule bottom) a = do
-  bs <- readTVar bottom
-  sbs <- readTVar bottomSchedule
+enqueue q@(Queue top bottom) a = do
+  (bs, sbs) <- readTVar bottom
   let bs' = a : bs
   case sbs of
     _:_:sbs' -> do
-      writeTVar bottomSchedule sbs'
-      writeTVar bottom bs'
+      writeTVar bottom (bs', sbs')
     _ -> do
-      ts <- readTVar top
+      (ts, _sts) <- readTVar top
       let ts' = rotate ts bs' []
-      writeTVar bottom []
-      writeTVar bottomSchedule ts'
-      writeTVar top ts'
-      writeTVar topSchedule ts'
+      writeTVar bottom ([], ts')
+      writeTVar top (ts', ts')
 
 -- | Dequeue a single item onto the 'Queue', 'retry'ing if there is nothing
 -- there. This is the motivating use case of this library, allowing a thread to
@@ -66,69 +58,61 @@ enqueue q@(Queue top topSchedule bottomSchedule bottom) a = do
 -- runtime system to read from the top of that 'Queue' when an item has
 -- been made available.
 dequeue :: Queue a -> STM a
-dequeue q@(Queue top topSchedule bottomSchedule bottom) = do
-  ts <- readTVar top
+dequeue q@(Queue top bottom) = do
+  (ts, sts) <- readTVar top
   case ts of
     [] -> retry
     t:ts' ->
-      readTVar topSchedule >>= \case
+      case sts of
         _:_:sts' -> do
-          writeTVar top ts'
-          writeTVar topSchedule sts'
+          writeTVar top (ts', sts')
           pure t
         _ -> do
-          bs <- readTVar bottom
+          (bs, _) <- readTVar bottom
           let !ts'' = rotate ts' bs []
-          writeTVar bottom []
-          writeTVar bottomSchedule ts''
-          writeTVar top ts''
-          writeTVar topSchedule ts''
+          writeTVar bottom ([], ts'')
+          writeTVar top (ts'', ts'')
           pure t
 
 -- | Try to 'dequeue' a single item. This function is offered to allow
 -- users to easily port from the 'TQueue' offered in the stm package,
 -- but is not the intended usage of the library.
 tryDequeue :: Queue a -> STM (Maybe a)
-tryDequeue q@(Queue top topSchedule bottomSchedule bottom) = do
-  ts <- readTVar top
+tryDequeue q@(Queue top bottom) = do
+  (ts, sts) <- readTVar top
   case ts of
     [] -> pure Nothing
     t:ts' ->
-      readTVar topSchedule >>= \case
+      case sts of
         _:_:sts' -> do
-          writeTVar top ts'
-          writeTVar topSchedule sts'
+          writeTVar top (ts', sts')
           pure (Just t)
         _ -> do
-          bs <- readTVar bottom
+          (bs, _) <- readTVar bottom
           let !ts'' = rotate ts' bs []
-          writeTVar bottom []
-          writeTVar bottomSchedule ts''
-          writeTVar top ts''
-          writeTVar topSchedule ts''
+          writeTVar bottom ([], ts'')
+          writeTVar top (ts'', ts'')
           pure (Just t)
 
 -- | Peek at the top of the 'Queue', returning the top element.
 peek :: Queue a -> STM a
-peek (Queue top _topSchedule _bottomSchedule _bottom) =
+peek (Queue top _bottom) =
   readTVar top >>= \case
-    x : xs -> pure x
-    [] -> retry
+    (x : xs, _) -> pure x
+    ([], _) -> retry
 
 -- | Try to 'peek' for the top item of the 'Queue'. This function is
 -- offered to easily port from the 'TQueue' offered in the stm package,
 -- but is not the intended usage of the library.
 tryPeek :: Queue a -> STM (Maybe a)
-tryPeek (Queue top _topSchedule _bottomSchedule _bottom) =
+tryPeek (Queue top _bottom) =
   readTVar top >>= \case
-    x : xs -> pure (Just x)
-    [] -> pure Nothing  
+    (x : xs, _) -> pure (Just x)
+    ([], _) -> pure Nothing  
 
 -- | Efficiently read the entire contents of a 'Queue' into a list.
 flush :: Queue a -> STM [a]
-flush (Queue top topSchedule bottomSchedule bottom) = do
-  xs <- swapTVar top []
-  ys <- swapTVar bottom []
-  writeTVar bottomSchedule []
-  writeTVar topSchedule []
+flush (Queue top bottom) = do
+  (xs, _) <- swapTVar top ([], [])
+  (ys, _) <- swapTVar bottom ([], [])
   pure (xs ++ reverse ys)
