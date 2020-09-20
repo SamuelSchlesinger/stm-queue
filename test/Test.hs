@@ -53,8 +53,8 @@ main = hspec $ do
       (q, q') <- atomically do
         q <- newQueue @Int
         q' <- TQueue.newTQueue @Int
-        forM_ [1..10000] (TQueue.writeTQueue q')
-        forM_ [1..10000] (enqueue q)
+        forM_ [1..100000] (TQueue.writeTQueue q')
+        forM_ [1..100000] (enqueue q)
         pure (q, q')
       -- Nondeterministic tests hurt my soul, but its made up for by the
       -- warmth this test succeeding gives me.
