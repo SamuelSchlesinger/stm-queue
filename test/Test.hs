@@ -68,3 +68,10 @@ main = hspec $ do
         `shouldReturn` Nothing
       timeout (1 `seconds`) (atomically (peek q))
         `shouldReturn` Nothing
+    it "flushes everything properly" do
+      msgs <- atomically do
+        q <- newQueue @Int
+        forM_ [1..100] (enqueue q)
+        forM [1..100] (const $ dequeue q)
+      msgs `shouldBe` [1..100]
+
