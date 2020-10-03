@@ -17,6 +17,7 @@ module Data.Queue
 , enqueue
 , dequeue
 , tryDequeue
+, flush
 ) where
 
 import Control.Concurrent

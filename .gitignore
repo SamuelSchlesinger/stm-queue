@@ -1,3 +1,4 @@
 dist-newstyle/
 .*.sw*
 tags
+cabal.project.local
