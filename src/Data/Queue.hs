@@ -34,10 +34,12 @@ newQueue = Queue
   <$> newTVar ([], [])
   <*> newTVar ([], [])
 
-rotate :: [a] -> [a] -> [a] -> [a]
-rotate [] bottom acc = bottom ++ acc
-rotate (t:ts) (b:bs) acc = t : rotate ts bs (b:acc)
-rotate ts [] acc = ts ++ acc
+rotate :: [a] -> [a] -> [a]
+rotate xs ys = go xs ys []
+  where
+  go [] bottom acc = bottom ++ acc
+  go (t:ts) (b:bs) acc = t : go ts bs (b:acc)
+  go ts [] acc = ts ++ acc
 
 -- | Enqueue a single item onto the 'Queue'.
 enqueue :: Queue a -> a -> STM ()
@@ -49,7 +51,7 @@ enqueue q@(Queue top bottom) a = do
       writeTVar bottom (bs', sbs')
     _ -> do
       (ts, _sts) <- readTVar top
-      let ts' = rotate ts bs' []
+      let ts' = rotate ts bs'
       writeTVar bottom ([], ts')
       writeTVar top (ts', ts')
 
@@ -70,7 +72,7 @@ dequeue q@(Queue top bottom) = do
           pure t
         _ -> do
           (bs, _) <- readTVar bottom
-          let !ts'' = rotate ts' bs []
+          let !ts'' = rotate ts' bs
           writeTVar bottom ([], ts'')
           writeTVar top (ts'', ts'')
           pure t
@@ -90,7 +92,7 @@ tryDequeue q@(Queue top bottom) = do
           pure (Just t)
         _ -> do
           (bs, _) <- readTVar bottom
-          let !ts'' = rotate ts' bs []
+          let !ts'' = rotate ts' bs
           writeTVar bottom ([], ts'')
           writeTVar top (ts'', ts'')
           pure (Just t)
@@ -116,4 +118,4 @@ flush :: Queue a -> STM [a]
 flush (Queue top bottom) = do
   (xs, _) <- swapTVar top ([], [])
   (ys, _) <- swapTVar bottom ([], [])
-  pure (xs ++ reverse ys)
+  pure (rotate xs ys)
