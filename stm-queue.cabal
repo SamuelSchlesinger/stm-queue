@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                stm-queue
-version:             0.1.2.0
+version:             0.1.2.1
 synopsis:            An implementation of a real-time concurrent queue
 description:         An implementation of a real-time concurrent queue.
 homepage:            https://github.com/SamuelSchlesinger/stm-queue
