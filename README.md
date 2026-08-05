@@ -3,10 +3,14 @@
 [![Hackage](https://img.shields.io/hackage/v/stm-queue.svg)](https://hackage.haskell.org/package/stm-queue)
 [![Haskell CI](https://github.com/SamuelSchlesinger/stm-queue/actions/workflows/ci.yml/badge.svg)](https://github.com/SamuelSchlesinger/stm-queue/actions/workflows/ci.yml)
 
-This is an implementation of a real-time queue using STM. It has lower
-throughput than `TQueue` but much lower latency as well. It does not support
-an equivalent to `unGetTQueue`, but could be made to likely if someone needs it. Here's an
-example:
+This is an implementation of an Okasaki-style real-time queue using STM. Its
+incremental rotations avoid the latency spikes caused by reversing a large
+rear list in one queue operation. This is an algorithmic real-time guarantee;
+GHC and STM do not provide hard wall-clock real-time scheduling. The queue has
+lower throughput than `TQueue` in exchange for more predictable structural
+work per operation.
+
+An unbounded queue can be used like this:
 
 ```haskell
 main :: IO ()
@@ -26,6 +30,28 @@ consumer q = forever do
 When queue creation does not need to be part of a transaction, `newQueueIO`
 avoids the overhead of `atomically newQueue`.
 
+Bounded queues use the same incremental queue algorithm and add transactional
+backpressure:
+
+```haskell
+bounded :: STM (Queue Message)
+bounded = newBoundedQueue 1024
+
+send :: Queue Message -> Message -> STM ()
+send = enqueue -- retries while a bounded queue is full
+
+trySend :: Queue Message -> Message -> STM Bool
+trySend = tryEnqueue -- returns False instead of retrying
+```
+
+`newBoundedQueueIO` constructs a bounded queue directly in `IO`. Dequeueing or
+flushing a bounded queue releases capacity atomically. A capacity of zero is
+valid and creates a queue that is always full. Bounded queues coordinate
+producers and consumers through one additional occupancy `TVar`; unbounded
+queues retain the original two-`TVar` representation and fast paths.
+
 It also supports `peek`, which looks at the next element of the `Queue`.
-For each operation except for `enqueue`, there is a `try` prefixed version
-which does not do an `stm` `retry` upon failure.
+`tryPeek`, `tryDequeue`, and `tryEnqueue` provide non-blocking variants of the
+operations which can otherwise `retry`.
+
+The package does not currently provide an equivalent of `unGetTQueue`.

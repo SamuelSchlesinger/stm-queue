@@ -13,6 +13,7 @@ import Data.List (sort)
 import Data.Queue
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
+import qualified Control.Concurrent.STM.TBQueue as B
 import qualified Control.Concurrent.STM.TQueue as T
 import System.Environment (getArgs)
 import System.Mem
@@ -29,6 +30,18 @@ makeBackedUpTQueue n = atomically do
   forM_ [1..n] (T.writeTQueue q')
   pure q'
 
+makeBackedUpBoundedQueue :: Int -> IO (Queue Int)
+makeBackedUpBoundedQueue n = atomically do
+  q <- newBoundedQueue (fromIntegral n)
+  forM_ [1..n] (enqueue q)
+  pure q
+
+makeBackedUpTBQueue :: Int -> IO (B.TBQueue Int)
+makeBackedUpTBQueue n = atomically do
+  q <- B.newTBQueue (fromIntegral n)
+  forM_ [1..n] (B.writeTBQueue q)
+  pure q
+
 burstBenchmarks :: Int -> [Benchmark]
 burstBenchmarks n =
   [ bench ("produce " <> show n <> " then consume from Queue") $ nfIO do
@@ -39,10 +52,22 @@ burstBenchmarks n =
       atomically (T.readTQueue q)
   ]
 
+boundedBurstBenchmarks :: Int -> [Benchmark]
+boundedBurstBenchmarks n =
+  [ bench ("produce " <> show n <> " then consume from bounded Queue") $ nfIO do
+      q <- makeBackedUpBoundedQueue n
+      atomically (dequeue q)
+  , bench ("produce " <> show n <> " then consume from TBQueue") $ nfIO do
+      q <- makeBackedUpTBQueue n
+      atomically (B.readTBQueue q)
+  ]
+
 creationBenchmarks :: [Benchmark]
 creationBenchmarks =
   [ bench "newQueue via atomically" $ whnfIO (atomically (newQueue @Int))
   , bench "newQueueIO" $ whnfIO (newQueueIO @Int)
+  , bench "newBoundedQueue via atomically" $ whnfIO (atomically (newBoundedQueue @Int 1024))
+  , bench "newBoundedQueueIO" $ whnfIO (newBoundedQueueIO @Int 1024)
   ]
 
 latencySampleCount :: Int
@@ -192,4 +217,7 @@ main = do
         <> burstBenchmarks 100
         <> burstBenchmarks 1000
         <> burstBenchmarks 10000
+        <> boundedBurstBenchmarks 100
+        <> boundedBurstBenchmarks 1000
+        <> boundedBurstBenchmarks 10000
         )

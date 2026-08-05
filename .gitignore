@@ -1,4 +1,4 @@
-dist-newstyle/
+dist-newstyle*/
 .*.sw*
 tags
 cabal.project.local
