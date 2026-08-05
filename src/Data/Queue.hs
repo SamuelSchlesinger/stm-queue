@@ -20,10 +20,19 @@ module Data.Queue
 , flush
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 
--- | Real time 'Queue' backed by transactional variables ('TVar's)
+-- | Real-time 'Queue' backed by transactional variables ('TVar's).
+-- Rotations are evaluated incrementally across queue operations.
+--
+-- If the two TVars contain @(ts, sts)@ and @(bs, sbs)@, respectively,
+-- the logical contents are @ts ++ reverse bs@. In every stored state,
+-- @length bs <= length ts@, and @ts@ is empty exactly when the queue is
+-- empty. The two schedules are independent cursors into the current
+-- incremental rotation, allowing the common enqueue and dequeue paths to
+-- update different TVars. Each fast path advances its cursor by two cells;
+-- together, they trigger a new rotation before the length invariant can be
+-- violated.
 data Queue a = Queue
   {-# UNPACK #-} !(TVar ([a], [a]))
   {-# UNPACK #-} !(TVar ([a], [a]))
@@ -34,6 +43,8 @@ newQueue = Queue
   <$> newTVar ([], [])
   <*> newTVar ([], [])
 
+-- Queue operations call this only when @length ys <= length xs + 1@, under
+-- which it incrementally produces @xs ++ reverse ys@.
 rotate :: [a] -> [a] -> [a]
 rotate xs ys = go xs ys []
   where
@@ -43,7 +54,7 @@ rotate xs ys = go xs ys []
 
 -- | Enqueue a single item onto the 'Queue'.
 enqueue :: Queue a -> a -> STM ()
-enqueue q@(Queue top bottom) a = do
+enqueue (Queue top bottom) a = do
   (bs, sbs) <- readTVar bottom
   let bs' = a : bs
   case sbs of
@@ -61,7 +72,7 @@ enqueue q@(Queue top bottom) a = do
 -- runtime system to read from the top of that 'Queue' when an item has
 -- been made available.
 dequeue :: Queue a -> STM a
-dequeue q@(Queue top bottom) = do
+dequeue (Queue top bottom) = do
   (ts, sts) <- readTVar top
   case ts of
     [] -> retry
@@ -81,7 +92,7 @@ dequeue q@(Queue top bottom) = do
 -- users to easily port from the 'TQueue' offered in the stm package,
 -- but is not the intended usage of the library.
 tryDequeue :: Queue a -> STM (Maybe a)
-tryDequeue q@(Queue top bottom) = do
+tryDequeue (Queue top bottom) = do
   (ts, sts) <- readTVar top
   case ts of
     [] -> pure Nothing
@@ -101,7 +112,7 @@ tryDequeue q@(Queue top bottom) = do
 peek :: Queue a -> STM a
 peek (Queue top _bottom) =
   readTVar top >>= \case
-    (x : xs, _) -> pure x
+    (x : _, _) -> pure x
     ([], _) -> retry
 
 -- | Try to 'peek' for the top item of the 'Queue'. This function is
@@ -110,8 +121,8 @@ peek (Queue top _bottom) =
 tryPeek :: Queue a -> STM (Maybe a)
 tryPeek (Queue top _bottom) =
   readTVar top >>= \case
-    (x : xs, _) -> pure (Just x)
-    ([], _) -> pure Nothing  
+    (x : _, _) -> pure (Just x)
+    ([], _) -> pure Nothing
 
 -- | Efficiently read the entire contents of a 'Queue' into a list.
 flush :: Queue a -> STM [a]

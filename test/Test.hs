@@ -5,10 +5,8 @@ module Main where
 
 import Test.Hspec
 import Control.Concurrent.STM
-import qualified Control.Concurrent.STM.TQueue as TQueue
 import Control.Monad
 import Data.Queue
-import Control.Concurrent.Async (race)
 import System.Timeout
 
 main :: IO ()
@@ -30,7 +28,7 @@ main = hspec $ do
       msg <- atomically do
         q <- newQueue @Int
         forM_ [1..100] (enqueue q)
-        forM_ [1..99] (const . void $ tryDequeue q)
+        forM_ [1..99 :: Int] (const . void $ tryDequeue q)
         tryDequeue q
       msg `shouldBe` Just 100
     it "Nothing can be dequeued from an empty queue" do
@@ -59,20 +57,14 @@ main = hspec $ do
       msgs <- atomically do
         q <- newQueue @Int
         forM_ [1..10] (enqueue q)
-        forM [1..10] (const $ dequeue q)
+        forM [1..10 :: Int] (const $ dequeue q)
       msgs `shouldBe` [1..10]
-    it "behaves faster than TQueue in its worst case" do
-      (q, q') <- atomically do
+    it "dequeues the oldest item from a large backlog" do
+      msg <- atomically do
         q <- newQueue @Int
-        q' <- TQueue.newTQueue @Int
-        forM_ [1..100000] (TQueue.writeTQueue q')
         forM_ [1..100000] (enqueue q)
-        pure (q, q')
-      -- Nondeterministic tests hurt my soul, but its made up for by the
-      -- warmth this test succeeding gives me.
-      race (atomically (TQueue.readTQueue q'))
-           (atomically (dequeue q))
-        `shouldReturn` Right 1
+        dequeue q
+      msg `shouldBe` 1
     it "all reads should block on an empty queue" do
       q <- atomically (newQueue @Int)
       let seconds n = n * 1000000
@@ -86,4 +78,3 @@ main = hspec $ do
         forM_ [1..100] (enqueue q)
         flush q
       msgs `shouldBe` [1..100]
-

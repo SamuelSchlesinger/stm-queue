@@ -12,8 +12,9 @@ example:
 main :: IO ()
 main = do
   q <- atomically do
-    q <- atomically newQueue
+    q <- newQueue
     forM_ [1..1000] (enqueue q)
+    pure q
   consumer q
 
 consumer :: Queue Int -> IO ()
