@@ -39,6 +39,12 @@ burstBenchmarks n =
       atomically (T.readTQueue q)
   ]
 
+creationBenchmarks :: [Benchmark]
+creationBenchmarks =
+  [ bench "newQueue via atomically" $ whnfIO (atomically (newQueue @Int))
+  , bench "newQueueIO" $ whnfIO (newQueueIO @Int)
+  ]
+
 latencySampleCount :: Int
 latencySampleCount = 20
 
@@ -182,7 +188,8 @@ main = do
       mapM_ postBurstLatencyReport [100, 1000, 10000]
     _ ->
       defaultMain
-        (  burstBenchmarks 100
+        (  creationBenchmarks
+        <> burstBenchmarks 100
         <> burstBenchmarks 1000
         <> burstBenchmarks 10000
         )

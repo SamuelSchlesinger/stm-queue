@@ -1,4 +1,3 @@
-{-# LANGUAGE PostfixOperators #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
 module Main where
@@ -18,6 +17,10 @@ main = hspec $ do
         enqueue q "Hello"
         dequeue q
       msg `shouldBe` "Hello"
+    it "creates a queue directly in IO" do
+      q <- newQueueIO @String
+      atomically (enqueue q "Hello")
+      atomically (dequeue q) `shouldReturn` "Hello"
     it "enqueues and tries to dequeue a message" do
       msg <- atomically do
         q <- newQueue
@@ -68,9 +71,9 @@ main = hspec $ do
     it "all reads should block on an empty queue" do
       q <- atomically (newQueue @Int)
       let seconds n = n * 1000000
-      timeout (1 `seconds`) (atomically (dequeue q))
+      timeout (seconds 1) (atomically (dequeue q))
         `shouldReturn` Nothing
-      timeout (1 `seconds`) (atomically (peek q))
+      timeout (seconds 1) (atomically (peek q))
         `shouldReturn` Nothing
     it "flushes everything properly" do
       msgs <- atomically do

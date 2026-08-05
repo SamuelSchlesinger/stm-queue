@@ -12,6 +12,7 @@ Portability: POSIX, Windows
 module Data.Queue
 ( Queue
 , newQueue
+, newQueueIO
 , peek
 , tryPeek
 , enqueue
@@ -22,7 +23,7 @@ module Data.Queue
 
 import Control.Concurrent.STM
 
--- | Real-time 'Queue' backed by transactional variables ('TVar's).
+-- | Real-time t'Queue' backed by transactional t'TVar' values.
 -- Rotations are evaluated incrementally across queue operations.
 --
 -- If the two TVars contain @(ts, sts)@ and @(bs, sbs)@, respectively,
@@ -37,22 +38,32 @@ data Queue a = Queue
   {-# UNPACK #-} !(TVar ([a], [a]))
   {-# UNPACK #-} !(TVar ([a], [a]))
 
--- | Create a new, empty 'Queue'
+-- | Create a new, empty t'Queue'.
 newQueue :: STM (Queue a)
 newQueue = Queue
   <$> newTVar ([], [])
   <*> newTVar ([], [])
 
+-- | Create a new, empty t'Queue' directly in 'IO'.
+--
+-- This avoids the overhead of @atomically newQueue@ when the queue does not
+-- need to be created as part of a larger transaction.
+newQueueIO :: IO (Queue a)
+newQueueIO = Queue
+  <$> newTVarIO ([], [])
+  <*> newTVarIO ([], [])
+
 -- Queue operations call this only when @length ys <= length xs + 1@, under
 -- which it incrementally produces @xs ++ reverse ys@.
 rotate :: [a] -> [a] -> [a]
+rotate xs [] = xs
 rotate xs ys = go xs ys []
   where
   go [] bottom acc = bottom ++ acc
   go (t:ts) (b:bs) acc = t : go ts bs (b:acc)
   go ts [] acc = ts ++ acc
 
--- | Enqueue a single item onto the 'Queue'.
+-- | Enqueue a single item onto the t'Queue'.
 enqueue :: Queue a -> a -> STM ()
 enqueue (Queue top bottom) a = do
   (bs, sbs) <- readTVar bottom
@@ -66,10 +77,10 @@ enqueue (Queue top bottom) a = do
       writeTVar bottom ([], ts')
       writeTVar top (ts', ts')
 
--- | Dequeue a single item onto the 'Queue', 'retry'ing if there is nothing
+-- | Dequeue a single item from the t'Queue', 'retry'ing if there is nothing
 -- there. This is the motivating use case of this library, allowing a thread to
--- register its interest in the head of a 'Queue' and be woken up by the
--- runtime system to read from the top of that 'Queue' when an item has
+-- register its interest in the head of a t'Queue' and be woken up by the
+-- runtime system to read from the top of that t'Queue' when an item has
 -- been made available.
 dequeue :: Queue a -> STM a
 dequeue (Queue top bottom) = do
@@ -108,14 +119,14 @@ tryDequeue (Queue top bottom) = do
           writeTVar top (ts'', ts'')
           pure (Just t)
 
--- | Peek at the top of the 'Queue', returning the top element.
+-- | Peek at the top of the t'Queue', returning the top element.
 peek :: Queue a -> STM a
 peek (Queue top _bottom) =
   readTVar top >>= \case
     (x : _, _) -> pure x
     ([], _) -> retry
 
--- | Try to 'peek' for the top item of the 'Queue'. This function is
+-- | Try to 'peek' for the top item of the t'Queue'. This function is
 -- offered to easily port from the 'TQueue' offered in the stm package,
 -- but is not the intended usage of the library.
 tryPeek :: Queue a -> STM (Maybe a)
@@ -124,7 +135,7 @@ tryPeek (Queue top _bottom) =
     (x : _, _) -> pure (Just x)
     ([], _) -> pure Nothing
 
--- | Efficiently read the entire contents of a 'Queue' into a list.
+-- | Efficiently read the entire contents of a t'Queue' into a list.
 flush :: Queue a -> STM [a]
 flush (Queue top bottom) = do
   (xs, _) <- swapTVar top ([], [])
