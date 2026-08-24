@@ -46,9 +46,10 @@ trySend = tryEnqueue -- returns False instead of retrying
 
 `newBoundedQueueIO` constructs a bounded queue directly in `IO`. Dequeueing or
 flushing a bounded queue releases capacity atomically. A capacity of zero is
-valid and creates a queue that is always full. Bounded queues coordinate
-producers and consumers through one additional occupancy `TVar`; unbounded
-queues retain the original two-`TVar` representation and fast paths.
+valid and creates a queue that is always full. Bounded queues track free
+capacity as split read and write credits, as `TBQueue` does, so producers and
+the consumer rarely write the same `TVar`; unbounded queues retain the
+original two-`TVar` representation and fast paths.
 
 It also supports `peek`, which looks at the next element of the `Queue`.
 `tryPeek`, `tryDequeue`, and `tryEnqueue` provide non-blocking variants of the

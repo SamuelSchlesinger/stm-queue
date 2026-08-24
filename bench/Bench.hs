@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BangPatterns #-}
 module Main where
 
 import Control.Concurrent (threadDelay, yield)
@@ -134,7 +135,7 @@ howManyCooks newQ readQ writeQ threadCount = do
   start <- newEmptyTMVarIO
   stop <- newTVarIO False
   let
-    consumer count = do
+    consumer !count = do
       next <- atomically do
         stopped <- readTVar stop
         if stopped
@@ -146,7 +147,7 @@ howManyCooks newQ readQ writeQ threadCount = do
           yield
           consumer (count + 1)
 
-    producer count = do
+    producer !count = do
       continue <- atomically do
         stopped <- readTVar stop
         if stopped
@@ -203,12 +204,33 @@ throughputTest n = do
   putStrLn ("Queue reads - TQueue reads over TQueue reads: " <> show (relativeDifference queueReads tQueueReads))
   putStrLn ("Queue writes - TQueue writes over TQueue writes: " <> show (relativeDifference queueWrites tQueueWrites))
 
+boundedCapacity :: Int
+boundedCapacity = 1024
+
+-- Bounded queues couple producers and consumers through their capacity
+-- accounting, so their behaviour under fan-in is measured separately.
+boundedThroughputTest :: Int -> IO ()
+boundedThroughputTest n = do
+  putStrLn ("Running a bounded (" <> show boundedCapacity <> ") throughput test for " <> show n <> " threads...")
+  putStrLn "Bounded Queue: "
+  performGC
+  (queueWrites, queueReads) <-
+    howManyCooks (newBoundedQueueIO (fromIntegral boundedCapacity)) dequeue enqueue n
+  putStrLn "TBQueue: "
+  performGC
+  (tbQueueWrites, tbQueueReads) <-
+    howManyCooks (B.newTBQueueIO (fromIntegral boundedCapacity)) B.readTBQueue B.writeTBQueue n
+  putStrLn ("Bounded Queue reads - TBQueue reads over TBQueue reads: " <> show (relativeDifference queueReads tbQueueReads))
+  putStrLn ("Bounded Queue writes - TBQueue writes over TBQueue writes: " <> show (relativeDifference queueWrites tbQueueWrites))
+
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ["--throughput"] ->
       sequence_ [ throughputTest n | n <- [2^i | i <- [1..12 :: Int]] ]
+    ["--throughput-bounded"] ->
+      sequence_ [ boundedThroughputTest n | n <- [2^i | i <- [1..12 :: Int]] ]
     ["--latency"] ->
       mapM_ postBurstLatencyReport [100, 1000, 10000]
     _ ->

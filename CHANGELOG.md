@@ -1,5 +1,17 @@
 # Revision history for stm-queue
 
+## 0.2.2.0 -- 2026-08-23
+
+- Bounded queues now track free capacity as split read and write credits, in
+  the style of `TBQueue`. Producers and the consumer conflict on capacity
+  accounting once per `limit` enqueues instead of on every operation, which
+  is several times faster for a mailbox fed by many producers.
+- Added `Data.Queue.Internal`, exposing the representation and its
+  invariants for property tests. It is not covered by the PVP.
+- Added a model-based property test and a multi-producer stress test.
+- Added a bounded `Queue` versus `TBQueue` throughput benchmark
+  (`--throughput-bounded`).
+
 ## 0.2.1.0 -- 2026-08-05
 
 - Added bounded real-time queues with `newBoundedQueue` and
