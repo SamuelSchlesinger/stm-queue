@@ -1,5 +1,16 @@
 # Revision history for stm-queue
 
+## 0.2.2.0 -- UNRELEASED
+
+- Bounded queues now track free capacity as split read and write credits, in
+  the style of `TBQueue`. This batches capacity transfers when the workload
+  allows; saturated queues may still transfer credits on every enqueue.
+- Moved the implementation to a private `Data.Queue.Internal` module so
+  property tests can inspect its representation without exposing constructors.
+- Added a model-based property test and a multi-producer stress test.
+- Added a bounded `Queue` versus `TBQueue` throughput benchmark
+  (`--throughput-bounded`).
+
 ## 0.2.1.0 -- 2026-08-05
 
 - Added bounded real-time queues with `newBoundedQueue` and
