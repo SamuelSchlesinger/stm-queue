@@ -48,7 +48,7 @@ jobs:
     - name: Build
       run: cabal build --enable-tests --enable-benchmarks --ghc-options=-Werror all
     - name: Run tests
-      run: cabal test all --test-options='+RTS -N2 -RTS'
+      run: cabal test all --enable-tests --ghc-options=-Werror --test-options='+RTS -N2 -RTS'
     - name: Package checks
       if: matrix.ghc-version == '9.14.1'
       run: |
