@@ -35,7 +35,7 @@ common warnings
 library
   import:              warnings
   exposed-modules:     Data.Queue
-                       Data.Queue.Internal
+  other-modules:       Data.Queue.Internal
   other-extensions:    LambdaCase, BangPatterns
   build-depends:       base >=4.12 && <5,
                        stm >=2.3 && <3
@@ -45,11 +45,12 @@ library
 test-suite stm-queue-test
   import:              warnings
   type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
+  hs-source-dirs:      test src
+  other-modules:       Data.Queue.Internal
   main-is:             Test.hs
   build-depends:       base >=4.12 && <5,
                        stm >=2.3 && <3,
-                       stm-queue,
+                       async >=2.2,
                        hspec >=2.7.4,
                        QuickCheck >=2.14
   other-extensions:    TypeApplications, BlockArguments, ScopedTypeVariables

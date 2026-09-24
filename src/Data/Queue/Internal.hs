@@ -9,9 +9,8 @@ Maintainer: sgschlesinger@gmail.com
 Stability: experimental
 Portability: POSIX, Windows
 
-This module exposes the representation of t'Queue' so that its invariants can
-be inspected, for example by property tests. It is not subject to the PVP;
-prefer "Data.Queue" unless you need the constructors.
+This private module contains the queue representation and its invariants.
+Property tests compile it directly; the public API is "Data.Queue".
 -}
 module Data.Queue.Internal
 ( Queue (..)
@@ -62,8 +61,9 @@ data Queue a = Queue
 -- * only when the write credits are exhausted does an enqueue move the
 --   accumulated read credits over, touching the TVar the consumer writes.
 --
--- Producers and the consumer therefore conflict on capacity accounting once
--- per @limit@ enqueues rather than on every operation.
+-- This can batch capacity transfers between producers and consumers. The
+-- batch size depends on the workload: if a full queue is repeatedly dequeued
+-- and immediately refilled, each enqueue transfers a single read credit.
 data Capacity
   = Unbounded
   | Bounded
@@ -94,7 +94,7 @@ newQueueIO = Queue Unbounded
 --
 -- The incremental queue rotation is unchanged. Bounded queues add two
 -- credit TVars so capacity changes remain atomic with queue operations
--- while producers and consumers rarely write the same TVar.
+-- while separating producer and consumer accounting between credit transfers.
 --
 -- @since 0.2.1.0
 newBoundedQueue :: Natural -> STM (Queue a)

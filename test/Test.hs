@@ -6,13 +6,11 @@ module Main where
 import Test.Hspec
 import Test.Hspec.QuickCheck (modifyMaxSize, modifyMaxSuccess, prop)
 import Test.QuickCheck
-import Control.Concurrent (forkIO)
+import Control.Concurrent.Async (concurrently, mapConcurrently_)
 import Control.Concurrent.STM
-import Control.Exception (SomeException, throwIO, try)
 import Control.Monad
 import Data.Foldable (for_)
 import Data.Queue.Internal
-import Data.Traversable (for)
 import Numeric.Natural (Natural)
 import System.Timeout
 
@@ -161,16 +159,14 @@ main = hspec $ do
           perProducer = 5000 :: Int
       for_ [Nothing, Just 16, Just 1] \capacity -> do
         q <- maybe newQueueIO newBoundedQueueIO capacity
-        done <- newTVarIO (0 :: Int)
-        results <- newTVarIO []
-        for_ [1 .. producers] \p -> forkIO do
-          r <- try @SomeException $ for_ [1 .. perProducer] \i ->
-            atomically (enqueue q (p, i))
-          atomically (modifyTVar' results (r :) >> modifyTVar' done (+ 1))
-        consumed <- for [1 .. producers * perProducer] \_ ->
-          atomically (dequeue q)
-        atomically (readTVar done >>= check . (== producers))
-        atomically (readTVar results) >>= mapM_ (either throwIO pure)
+        let produce p = for_ [1 .. perProducer] \i ->
+              atomically (enqueue q (p, i))
+        result <- timeout 10000000 $ concurrently
+          (mapConcurrently_ produce [1 .. producers])
+          (replicateM (producers * perProducer) (atomically (dequeue q)))
+        consumed <- case result of
+          Nothing -> expectationFailure "producer/consumer test timed out" >> fail "timeout"
+          Just ((), messages) -> pure messages
         for_ [1 .. producers] \p ->
           [i | (p', i) <- consumed, p' == p] `shouldBe` [1 .. perProducer]
         atomically (tryDequeue q) `shouldReturn` Nothing
